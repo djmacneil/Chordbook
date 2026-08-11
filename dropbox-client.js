@@ -130,6 +130,14 @@ const DropboxClient = (() => {
     return access;
   }
 
+  // Dropbox requires header values to be ASCII-only; non-ASCII chars in JSON
+  // must be \u-escaped (this matters for filenames with accents, curly quotes, etc).
+  function asciiSafeHeaderJson(obj) {
+    return JSON.stringify(obj).replace(/[\u0080-\uffff]/g, (c) =>
+      '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0')
+    );
+  }
+
   function isConnected() {
     return !!localStorage.getItem(LS_KEYS.refresh) || !!localStorage.getItem(LS_KEYS.access);
   }
@@ -194,7 +202,7 @@ const DropboxClient = (() => {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Dropbox-API-Arg': JSON.stringify({ path }),
+        'Dropbox-API-Arg': asciiSafeHeaderJson({ path }),
       },
     });
     if (!res.ok) {
