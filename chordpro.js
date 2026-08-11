@@ -175,7 +175,7 @@ const ChordPro = (() => {
         const d = document.createElement('div');
         d.className = 'cp-line';
         if (!item.hasChords) {
-          d.textContent = item.text || '\u00A0';
+          d.textContent = item.raw || '\u00A0';
         } else {
           for (const seg of item.segments) {
             const span = document.createElement('span');
