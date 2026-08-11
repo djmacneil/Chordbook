@@ -148,7 +148,10 @@
     const container = $('song-content');
     try {
       if (typeof currentSong.content !== 'string' || currentSong.content.length === 0) {
-        throw new Error('This song has no stored content (empty or failed download).');
+        const sizeNote = currentSong.size > 0
+          ? `Dropbox reports this file is ${currentSong.size} bytes, but nothing was cached locally.`
+          : `No content was cached for this file.`;
+        throw new Error(`${sizeNote} Try Sync now in Settings.`);
       }
       const blocks = ChordPro.parse(currentSong.content);
       ChordPro.render(container, blocks, { transpose: transposeSteps, preferFlat });
@@ -211,6 +214,7 @@
 
   const SCROLL_SPEEDS = [0, 22, 42, 70]; // px/sec
   const SCROLL_LABELS = ['▶ Scroll', '▶ Slow', '▶ Medium', '▶ Fast'];
+  let autoScrollPos = 0; // fractional scroll position we own, since scrollTop rounds to whole pixels
   function stopAutoScroll() {
     autoScrollState = 0;
     if (autoScrollRAF) cancelAnimationFrame(autoScrollRAF);
@@ -222,7 +226,8 @@
     return (ts) => {
       if (autoScrollState === 0) return;
       const dt = (ts - lastTs) / 1000;
-      container.scrollTop += SCROLL_SPEEDS[autoScrollState] * dt;
+      autoScrollPos += SCROLL_SPEEDS[autoScrollState] * dt;
+      container.scrollTop = autoScrollPos;
       if (container.scrollTop + container.clientHeight >= container.scrollHeight - 2) {
         stopAutoScroll();
         return;
@@ -237,6 +242,7 @@
     $('btn-autoscroll').textContent = SCROLL_LABELS[autoScrollState];
     $('btn-autoscroll').classList.add('active');
     if (autoScrollRAF) cancelAnimationFrame(autoScrollRAF);
+    autoScrollPos = container.scrollTop; // resync in case the user manually scrolled
     autoScrollRAF = requestAnimationFrame(tickScroll(container, performance.now()));
   });
 
@@ -355,11 +361,29 @@
       const remotePaths = new Set(remoteFiles.map(f => f.path));
 
       let downloaded = 0;
+      const failed = [];
       for (const f of remoteFiles) {
         const existing = cachedByPath.get(f.path);
-        if (existing && existing.rev === f.rev) continue; // unchanged
+        // Only skip re-download if we actually have usable cached content —
+        // a same-revision record with empty/missing content is treated as stale
+        // so a broken sync self-heals on the next attempt instead of sticking forever.
+        if (existing && existing.rev === f.rev && existing.content && existing.content.length > 0) continue;
+
         syncStripText.textContent = `Syncing… ${f.name}`;
-        const content = await DropboxClient.downloadFile(f.path);
+        let content = await DropboxClient.downloadFile(f.path);
+
+        // Integrity check: Dropbox reports a non-zero size but we got nothing back —
+        // retry once before giving up, since this can happen on a flaky mobile connection.
+        if (f.size > 0 && (!content || content.length === 0)) {
+          console.warn('ChordBook: empty download for', f.path, '(expected', f.size, 'bytes) — retrying once.');
+          content = await DropboxClient.downloadFile(f.path);
+        }
+        if (f.size > 0 && (!content || content.length === 0)) {
+          console.error('ChordBook: sync failed twice for', f.path);
+          failed.push(f.name);
+          continue; // leave any previous good cache entry untouched rather than overwrite with empty content
+        }
+
         const meta = ChordPro.extractMeta(content);
         await SongDB.putSong({
           path: f.path,
@@ -367,6 +391,7 @@
           name: f.name,
           rev: f.rev,
           content,
+          size: f.size,
           title: meta.title,
           subtitle: meta.subtitle,
           artist: meta.artist,
@@ -386,7 +411,11 @@
       await loadFromCache();
       updateSyncStatus();
       updateStorageInfo();
-      if (manual) showToast(downloaded ? `Synced — ${downloaded} file(s) updated.` : 'Already up to date.');
+      if (failed.length) {
+        showToast(`Synced, but ${failed.length} file(s) failed: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''}. Will retry next sync.`, true);
+      } else if (manual) {
+        showToast(downloaded ? `Synced — ${downloaded} file(s) updated.` : 'Already up to date.');
+      }
     } catch (e) {
       showToast(e.message, true);
     } finally {
