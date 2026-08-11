@@ -144,9 +144,30 @@
 
   function renderCurrentSong() {
     if (!currentSong) return;
-    const blocks = ChordPro.parse(currentSong.content);
     const preferFlat = localStorage.getItem(LS.flats) === '1';
-    ChordPro.render($('song-content'), blocks, { transpose: transposeSteps, preferFlat });
+    const container = $('song-content');
+    try {
+      if (typeof currentSong.content !== 'string' || currentSong.content.length === 0) {
+        throw new Error('This song has no stored content (empty or failed download).');
+      }
+      const blocks = ChordPro.parse(currentSong.content);
+      ChordPro.render(container, blocks, { transpose: transposeSteps, preferFlat });
+      if (!container.innerHTML.trim()) {
+        throw new Error('Parsed to empty output.');
+      }
+    } catch (e) {
+      console.error('ChordBook render failed for', currentSong.path, e);
+      container.innerHTML = '';
+      const warn = document.createElement('div');
+      warn.className = 'cp-comment';
+      warn.textContent = `Couldn't format this song (${e.message}). Showing raw file text below — ` +
+        `please send this song's content so the parser can be fixed.`;
+      container.appendChild(warn);
+      const pre = document.createElement('div');
+      pre.className = 'cp-tab';
+      pre.textContent = currentSong.content || '(no content stored)';
+      container.appendChild(pre);
+    }
   }
 
   $('btn-back').addEventListener('click', () => { stopAutoScroll(); showView('list'); });
