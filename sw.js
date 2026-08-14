@@ -8,6 +8,7 @@ const SHELL_FILES = [
   './app.js',
   './chordpro.js',
   './dropbox-client.js',
+  './proxy-client.js',
   './db.js',
   './manifest.json',
   './icons/icon-192.png',

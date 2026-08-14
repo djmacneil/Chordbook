@@ -29,6 +29,13 @@
   const syncStripText = $('sync-strip-text');
   const toastEl = $('toast');
 
+  function activeClient() {
+    return ProxyClient.isConfigured() ? ProxyClient : DropboxClient;
+  }
+  function sourceReady() {
+    return ProxyClient.isConfigured() || DropboxClient.isConnected();
+  }
+
   function showToast(msg, isError) {
     toastEl.textContent = msg;
     toastEl.className = 'toast' + (isError ? ' error' : '');
@@ -83,7 +90,7 @@
       songList.classList.add('hidden');
       if (allSongs.length === 0) {
         $('empty-title').textContent = 'No songs yet';
-        $('empty-sub').textContent = DropboxClient.isConnected()
+        $('empty-sub').textContent = sourceReady()
           ? 'No ChordPro files found yet — try Sync now in Settings.'
           : 'Connect Dropbox in Settings to load your Songbook.';
         $('btn-empty-action').textContent = 'Open Settings';
@@ -261,6 +268,7 @@
   // ---------- Settings ----------
   function openSettings() {
     $('input-app-key').value = DropboxClient.getAppKey();
+    $('input-proxy-url').value = ProxyClient.getProxyUrl();
     $('input-folder-path').value = localStorage.getItem(LS.folder) || '/Songbook';
     $('toggle-flats').checked = localStorage.getItem(LS.flats) === '1';
     updateDropboxStatus();
@@ -272,11 +280,35 @@
   $('btn-settings-back').addEventListener('click', () => { renderList(searchInput.value); showView('list'); });
 
   function updateDropboxStatus() {
+    const proxyOn = ProxyClient.isConfigured();
     const connected = DropboxClient.isConnected();
-    $('dropbox-status').textContent = connected ? 'Connected.' : 'Not connected.';
-    $('btn-dropbox-connect').classList.toggle('hidden', connected);
-    $('btn-dropbox-disconnect').classList.toggle('hidden', !connected);
+
+    // Dropbox login card: irrelevant once a public proxy is set, since the proxy
+    // holds its own credentials server-side and visitors never need to log in.
+    $('card-dropbox').classList.toggle('hidden', proxyOn);
+    $('card-appkey').classList.toggle('hidden', proxyOn);
+
+    if (proxyOn) {
+      $('dropbox-status').textContent = 'Not needed — this instance reads through a public proxy.';
+    } else {
+      $('dropbox-status').textContent = connected ? 'Connected.' : 'Not connected.';
+    }
+    $('btn-dropbox-connect').classList.toggle('hidden', proxyOn || connected);
+    $('btn-dropbox-disconnect').classList.toggle('hidden', proxyOn || !connected);
+    $('btn-clear-proxy-url').classList.toggle('hidden', !proxyOn);
   }
+
+  $('btn-save-proxy-url').addEventListener('click', () => {
+    ProxyClient.setProxyUrl($('input-proxy-url').value);
+    updateDropboxStatus();
+    showToast(ProxyClient.isConfigured() ? 'Public proxy saved — this instance is now public.' : 'Proxy URL cleared.');
+  });
+  $('btn-clear-proxy-url').addEventListener('click', () => {
+    ProxyClient.setProxyUrl('');
+    $('input-proxy-url').value = '';
+    updateDropboxStatus();
+    showToast('Proxy removed. Reconnect Dropbox to sync privately.');
+  });
 
   $('btn-save-app-key').addEventListener('click', () => {
     DropboxClient.setAppKey($('input-app-key').value);
@@ -347,15 +379,16 @@
   }
 
   async function syncWithDropbox(manual) {
-    if (!DropboxClient.isConnected()) {
-      if (manual) showToast('Connect Dropbox first.', true);
+    if (!sourceReady()) {
+      if (manual) showToast('Connect Dropbox, or set a public proxy URL, first.', true);
       return;
     }
+    const client = activeClient();
     const folder = localStorage.getItem(LS.folder) || '/Songbook';
     syncStrip.classList.remove('hidden');
     syncStripText.textContent = 'Syncing…';
     try {
-      const remoteFiles = await DropboxClient.listChordProFiles(folder);
+      const remoteFiles = await client.listChordProFiles(folder);
       const cached = await SongDB.getAllSongs();
       const cachedByPath = new Map(cached.map(c => [c.path, c]));
       const remotePaths = new Set(remoteFiles.map(f => f.path));
@@ -370,13 +403,13 @@
         if (existing && existing.rev === f.rev && existing.content && existing.content.length > 0) continue;
 
         syncStripText.textContent = `Syncing… ${f.name}`;
-        let content = await DropboxClient.downloadFile(f.path);
+        let content = await client.downloadFile(f.path);
 
         // Integrity check: Dropbox reports a non-zero size but we got nothing back —
         // retry once before giving up, since this can happen on a flaky mobile connection.
         if (f.size > 0 && (!content || content.length === 0)) {
           console.warn('ChordBook: empty download for', f.path, '(expected', f.size, 'bytes) — retrying once.');
-          content = await DropboxClient.downloadFile(f.path);
+          content = await client.downloadFile(f.path);
         }
         if (f.size > 0 && (!content || content.length === 0)) {
           console.error('ChordBook: sync failed twice for', f.path);
@@ -445,7 +478,7 @@
     await loadFromCache();
     updateDropboxStatus();
 
-    if (DropboxClient.isConnected()) {
+    if (sourceReady()) {
       syncWithDropbox(false);
     }
 

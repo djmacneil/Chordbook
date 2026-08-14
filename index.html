@@ -102,18 +102,26 @@
 
     <div class="settings-body">
 
-      <div class="settings-card">
+      <div class="settings-card" id="card-dropbox">
         <h3>Dropbox</h3>
         <p id="dropbox-status" class="muted">Not connected.</p>
         <button id="btn-dropbox-connect" class="btn-primary">Connect Dropbox</button>
         <button id="btn-dropbox-disconnect" class="btn-secondary hidden">Disconnect</button>
       </div>
 
-      <div class="settings-card">
+      <div class="settings-card" id="card-appkey">
         <h3>App key</h3>
         <p class="muted small">Paste the App Key from your own Dropbox app (App Console). Required once before connecting.</p>
         <input id="input-app-key" type="text" placeholder="Dropbox App Key" autocomplete="off" spellcheck="false">
         <button id="btn-save-app-key" class="btn-secondary">Save key</button>
+      </div>
+
+      <div class="settings-card">
+        <h3>Public access (optional)</h3>
+        <p class="muted small">Point this at a deployed ChordBook proxy (see README → worker.js) to make this instance fully public — visitors won't need a Dropbox login at all. Leave blank to use your own Dropbox connection above.</p>
+        <input id="input-proxy-url" type="text" placeholder="https://your-worker.your-name.workers.dev" autocomplete="off" spellcheck="false">
+        <button id="btn-save-proxy-url" class="btn-secondary">Save proxy URL</button>
+        <button id="btn-clear-proxy-url" class="btn-danger hidden">Remove proxy (use Dropbox login instead)</button>
       </div>
 
       <div class="settings-card">
@@ -153,6 +161,7 @@
 
 <script src="chordpro.js"></script>
 <script src="dropbox-client.js"></script>
+<script src="proxy-client.js"></script>
 <script src="db.js"></script>
 <script src="app.js"></script>
 </body>

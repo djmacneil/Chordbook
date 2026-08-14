@@ -60,6 +60,54 @@ files private to an app only you control.
 From here it works offline — the app re-syncs automatically each time you open
 it with a connection, and you can trigger a manual sync anytime from Settings.
 
+## 4. Optional: make it fully public (no login for visitors)
+
+By default, every visitor to your ChordBook URL taps **Connect Dropbox** and
+authorizes with *their own* Dropbox account — fine for you, but a stranger's
+account obviously won't have your Songbook folder. If you want anyone with
+the link to see your songs with **zero login step**, add a small proxy that
+holds your Dropbox credentials privately on a server, and have the app talk
+to that instead of Dropbox directly. Visitors never see or touch a token.
+
+This uses a free [Cloudflare Worker](https://workers.cloudflare.com/).
+
+**a) Get a refresh token** — the easiest way is through the app itself:
+1. On your own device, in Settings, connect Dropbox normally (steps 2–3 above).
+2. Open DevTools → Application (or Storage) → Local Storage → your app's origin.
+3. Copy the value of `cb_dbx_refresh_token`. Keep this private — it's the key
+   that lets the proxy read your Dropbox.
+
+**b) Deploy the Worker**
+1. Go to https://dash.cloudflare.com → **Workers & Pages** → **Create** →
+   **Create Worker**. Give it any name (e.g. `chordbook-proxy`) and deploy
+   the default template.
+2. Click **Edit code**, delete the placeholder, and paste in the contents of
+   `worker.js` from this folder. Click **Deploy**.
+3. Go to **Settings → Variables** on the worker. Add two **secret** variables:
+   - `DROPBOX_APP_KEY` — the same App Key from step 2 above.
+   - `DROPBOX_REFRESH_TOKEN` — the value you copied in (a).
+4. Note the Worker's URL, shown at the top (e.g.
+   `https://chordbook-proxy.yourname.workers.dev`).
+
+**c) Point the app at it**
+1. In the app's Settings, paste that URL into **Public access → Public proxy URL**
+   and tap **Save proxy URL**.
+2. That's it — the Dropbox/App key cards disappear (not needed anymore), and
+   this instance now syncs through the proxy. Anyone who opens the URL sees
+   your songs immediately with no login.
+
+**Notes on this setup:**
+- Your Dropbox refresh token lives only in the Worker's encrypted secrets —
+  never in the browser, never in the static files you hosted in step 1.
+- The proxy is read-only by design (`/list` and `/content` only); it can't
+  modify or delete anything in your Dropbox.
+- To revoke public access entirely, delete the Worker, or go to
+  https://www.dropbox.com/account/connected_apps and remove the app — this
+  invalidates the refresh token immediately.
+- If you want a private instance for yourself *and* a public one for
+  visitors, host two copies of these files (or two Worker-pointing configs) —
+  Settings are stored per-browser-origin, so each deployment is independent.
+
 ## Notes
 
 - **Search** matches song titles and full lyric/chord text, from the local cache
