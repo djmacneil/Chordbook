@@ -5,5 +5,5 @@
    each person connects their own Dropbox account instead. */
 
 window.CHORDBOOK_CONFIG = {
-  defaultProxyUrl: 'Https://chordbook-proxy.donnie-macneil.workers.dev', // e.g. 'https://chordbook-proxy.yourname.workers.dev'
+  defaultProxyUrl: 'https://chordbook-proxy.donnie-macneil.workers.dev', // e.g. 'https://chordbook-proxy.yourname.workers.dev'
 };
