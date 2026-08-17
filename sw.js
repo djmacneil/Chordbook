@@ -4,6 +4,7 @@ const CACHE_NAME = 'chordbook-shell-v1';
 const SHELL_FILES = [
   './',
   './index.html',
+  './config.js',
   './style.css',
   './app.js',
   './chordpro.js',

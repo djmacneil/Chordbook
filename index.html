@@ -119,6 +119,7 @@
       <div class="settings-card">
         <h3>Public access (optional)</h3>
         <p class="muted small">Point this at a deployed ChordBook proxy (see README → worker.js) to make this instance fully public — visitors won't need a Dropbox login at all. Leave blank to use your own Dropbox connection above.</p>
+        <p id="proxy-source-note" class="muted small hidden"></p>
         <input id="input-proxy-url" type="text" placeholder="https://your-worker.your-name.workers.dev" autocomplete="off" spellcheck="false">
         <button id="btn-save-proxy-url" class="btn-secondary">Save proxy URL</button>
         <button id="btn-clear-proxy-url" class="btn-danger hidden">Remove proxy (use Dropbox login instead)</button>
@@ -159,6 +160,7 @@
 
 <div id="toast" class="toast hidden"></div>
 
+<script src="config.js"></script>
 <script src="chordpro.js"></script>
 <script src="dropbox-client.js"></script>
 <script src="proxy-client.js"></script>

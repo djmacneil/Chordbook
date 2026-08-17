@@ -115,11 +115,28 @@ moves around between Cloudflare UI updates, which is why the CLI above is the
 more dependable route.)*
 
 **c) Point the app at it**
-1. In the app's Settings, paste that URL into **Public access → Public proxy URL**
-   and tap **Save proxy URL**.
-2. That's it — the Dropbox/App key cards disappear (not needed anymore), and
-   this instance now syncs through the proxy. Anyone who opens the URL sees
-   your songs immediately with no login.
+
+You have two options:
+
+- **Bake it in for everyone (recommended for a public link):** open `config.js`
+  in this folder and set `defaultProxyUrl` to your Worker's URL, e.g.:
+  ```js
+  window.CHORDBOOK_CONFIG = {
+    defaultProxyUrl: 'https://chordbook-proxy.yourname.workers.dev',
+  };
+  ```
+  Redeploy the static files (step 1). Now anyone who opens the link sees your
+  songs immediately — no Settings step, no login, nothing to type in.
+
+- **Or set it per-browser instead:** in the app's Settings, paste the URL into
+  **Public access → Public proxy URL** and tap **Save proxy URL**. This only
+  affects that one browser — fine for testing, but visitors on a fresh device
+  won't have it unless you use the `config.js` approach above.
+
+Either way, once a proxy URL is active the Dropbox/App key cards disappear —
+not needed anymore. If you ever want to test your own private Dropbox login
+on the same public deployment, tap **Remove proxy** in Settings — that opts
+your browser out of the `config.js` default without affecting other visitors.
 
 **Notes on this setup:**
 - Your Dropbox refresh token lives only in the Worker's encrypted secrets —

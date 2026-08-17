@@ -296,6 +296,14 @@
     $('btn-dropbox-connect').classList.toggle('hidden', proxyOn || connected);
     $('btn-dropbox-disconnect').classList.toggle('hidden', proxyOn || !connected);
     $('btn-clear-proxy-url').classList.toggle('hidden', !proxyOn);
+
+    const note = $('proxy-source-note');
+    if (proxyOn && ProxyClient.isUsingDeploymentDefault()) {
+      note.textContent = 'Using this deployment\'s built-in default (from config.js) — no visitor setup needed.';
+      note.classList.remove('hidden');
+    } else {
+      note.classList.add('hidden');
+    }
   }
 
   $('btn-save-proxy-url').addEventListener('click', () => {
