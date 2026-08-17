@@ -77,17 +77,42 @@ This uses a free [Cloudflare Worker](https://workers.cloudflare.com/).
 3. Copy the value of `cb_dbx_refresh_token`. Keep this private — it's the key
    that lets the proxy read your Dropbox.
 
-**b) Deploy the Worker**
-1. Go to https://dash.cloudflare.com → **Workers & Pages** → **Create** →
-   **Create Worker**. Give it any name (e.g. `chordbook-proxy`) and deploy
-   the default template.
-2. Click **Edit code**, delete the placeholder, and paste in the contents of
-   `worker.js` from this folder. Click **Deploy**.
-3. Go to **Settings → Variables** on the worker. Add two **secret** variables:
-   - `DROPBOX_APP_KEY` — the same App Key from step 2 above.
-   - `DROPBOX_REFRESH_TOKEN` — the value you copied in (a).
-4. Note the Worker's URL, shown at the top (e.g.
-   `https://chordbook-proxy.yourname.workers.dev`).
+**b) Deploy the Worker (via the `wrangler` CLI)**
+
+Cloudflare's dashboard UI for creating a bare Worker changes fairly often — the
+CLI is the stable path and works the same way regardless. This folder already
+includes `worker.js` and a `wrangler.toml` config for it, so it's just:
+
+```
+npm install -g wrangler        # one-time; needs Node.js installed
+wrangler login                 # opens a browser to authorize the CLI
+
+cd chordbook                   # this project folder, where worker.js lives
+wrangler deploy
+```
+
+That prints a URL like `https://chordbook-proxy.<your-subdomain>.workers.dev`
+— that's your proxy's address. Then set the two secrets it needs (each prompts
+you to paste the value, and it's stored encrypted — never shown again):
+
+```
+wrangler secret put DROPBOX_APP_KEY
+wrangler secret put DROPBOX_REFRESH_TOKEN
+```
+
+Use the App Key from step 2 above, and the refresh token from (a). After
+setting secrets, redeploy once more so the Worker picks them up:
+
+```
+wrangler deploy
+```
+
+*(If you'd rather use the dashboard: go to* dash.cloudflare.com *→ **Workers &
+Pages** → **Create** → look for a "Hello World" / blank Worker template in
+the gallery, deploy it, then use **Edit code** to paste in `worker.js`'s
+contents, and **Settings → Variables** to add the same two secrets. This flow
+moves around between Cloudflare UI updates, which is why the CLI above is the
+more dependable route.)*
 
 **c) Point the app at it**
 1. In the app's Settings, paste that URL into **Public access → Public proxy URL**
