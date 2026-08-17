@@ -1,6 +1,6 @@
 /* sw.js — caches the app shell only. Song content lives in IndexedDB (see db.js), not here. */
 
-const CACHE_NAME = 'chordbook-shell-v1';
+const CACHE_NAME = 'chordbook-shell-v2';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -36,6 +36,24 @@ self.addEventListener('fetch', (event) => {
   // Never intercept cross-origin calls (Dropbox API/auth, Google Fonts) — always hit network.
   if (url.origin !== self.location.origin) return;
   if (event.request.method !== 'GET') return;
+
+  // config.js holds the deployment's default proxy URL and is meant to be edited
+  // after deploy — always go to network first so changes take effect on next load
+  // without needing a cache-version bump, falling back to cache only if offline.
+  if (url.pathname.endsWith('/config.js')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
