@@ -1,6 +1,6 @@
 /* sw.js — caches the app shell only. Song content lives in IndexedDB (see db.js), not here. */
 
-const CACHE_NAME = 'chordbook-shell-v2';
+const CACHE_NAME = 'chordbook-shell-v3';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -37,36 +37,19 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (event.request.method !== 'GET') return;
 
-  // config.js holds the deployment's default proxy URL and is meant to be edited
-  // after deploy — always go to network first so changes take effect on next load
-  // without needing a cache-version bump, falling back to cache only if offline.
-  if (url.pathname.endsWith('/config.js')) {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response && response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(event.request))
-    );
-    return;
-  }
-
+  // Network-first: always try to get the latest app shell when online, and only
+  // fall back to the cached copy when there's no connectivity (e.g. at a gig with
+  // no signal). This trades a little load-time speed for updates always landing
+  // on the very next reload instead of silently staying stale.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const networkFetch = fetch(event.request)
-        .then((response) => {
-          if (response && response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || networkFetch;
-    })
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
