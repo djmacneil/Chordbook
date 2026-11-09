@@ -41,6 +41,8 @@ files private to an app only you control.
 5. In the app's **Permissions** tab, enable:
    - `files.metadata.read`
    - `files.content.read`
+   - `files.content.write` — only needed if you want to edit and save songs
+     from the app (see **Editing** below)
    Click **Submit** to save permissions.
 6. Back in **Settings**, copy the **App key** at the top.
 
@@ -133,8 +135,9 @@ You have two options:
   affects that one browser — fine for testing, but visitors on a fresh device
   won't have it unless you use the `config.js` approach above.
 
-Either way, once a proxy URL is active the Dropbox/App key cards disappear —
-not needed anymore. If you ever want to test your own private Dropbox login
+Either way, once a proxy URL is active visitors don't need the Dropbox card
+at all — it stays visible only as an optional **Sign in to edit** for you
+(see **Editing** below). If you ever want to test your own private Dropbox login
 on the same public deployment, tap **Remove proxy** in Settings — that opts
 your browser out of the `config.js` default without affecting other visitors.
 
@@ -150,11 +153,45 @@ your browser out of the `config.js` default without affecting other visitors.
   visitors, host two copies of these files (or two Worker-pointing configs) —
   Settings are stored per-browser-origin, so each deployment is independent.
 
+## Editing and saving songs
+
+On any device where you've connected Dropbox, the song view gets an **✎ Edit**
+button and the song list gets a **+** (new song) button. Visitors reading
+through the public proxy never see these.
+
+- **Edit** opens the raw ChordPro text. **Preview** renders it; **Save** writes
+  it back to the same file in Dropbox.
+- **Apply transpose** appears in the editor when you've transposed the song in
+  the viewer — it rewrites the chords (and `{key:}`) in the new key so you can
+  save it that way. Tab blocks and `[*annotations]` are left alone.
+- **+** creates `Title.cho` in your Songbook folder from a small template.
+
+**Setting it up (once):** enable `files.content.write` on your Dropbox app's
+Permissions tab. Existing sign-ins don't pick up new permissions, so on each
+tablet go to Settings → **Disconnect**, then **Connect Dropbox** (or **Sign in
+to edit**, on an instance using the public proxy). If you forget, the first
+save tells you so and the edit waits on the device until you reconnect.
+
+**How saving works:**
+- Every save is stored on the device first, then uploaded. With no signal the
+  song shows **Not uploaded** in the list and goes up automatically when the
+  connection returns (or at the next sync / app start). Syncing never
+  overwrites an edit that hasn't been uploaded.
+- Uploads use Dropbox's revision check: if the file was changed somewhere else
+  since this device last synced it, nothing is overwritten. Your version is
+  saved alongside as `Song (conflicted copy YYYY-MM-DD HHMM).cho` and the
+  original is re-downloaded, so you can compare and tidy up.
+- Saves go directly from the browser to Dropbox using your own sign-in. The
+  public proxy (`worker.js`) stays read-only, and its refresh token keeps the
+  read-only permissions it was issued with, even after you enable writing on
+  the app.
+
 ## Notes
 
 - **Search** matches song titles and full lyric/chord text, from the local cache
   — instant, no network needed.
-- **Transpose** shifts chords live per song without touching the Dropbox file.
+- **Transpose** shifts chords live per song without touching the Dropbox file
+  (use **Edit → Apply transpose** if you want to save it in the new key).
 - **Stage mode** (the moon icon in the song view) dims the toolbar and pushes
   contrast for dark venues.
 - **Auto-scroll** cycles slow/medium/fast/off — tap repeatedly to change speed.

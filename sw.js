@@ -1,6 +1,6 @@
 /* sw.js — caches the app shell only. Song content lives in IndexedDB (see db.js), not here. */
 
-const CACHE_NAME = 'chordbook-shell-v3';
+const CACHE_NAME = 'chordbook-shell-v4';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const SHELL_FILES = [
   './dropbox-client.js',
   './proxy-client.js',
   './db.js',
+  './save-queue.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

@@ -21,6 +21,7 @@
   const viewList = $('view-list');
   const viewSong = $('view-song');
   const viewSettings = $('view-settings');
+  const viewEdit = $('view-edit');
   const songList = $('song-list');
   const emptyState = $('empty-state');
   const searchInput = $('search-input');
@@ -35,6 +36,16 @@
   function sourceReady() {
     return ProxyClient.isConfigured() || DropboxClient.isConnected();
   }
+  // Saving always goes straight to Dropbox with the person's own sign-in — never
+  // through the public proxy, which stays read-only. So editing is only offered
+  // on devices where someone has connected Dropbox, even if reads use the proxy.
+  function canEdit() {
+    return DropboxClient.isConnected();
+  }
+  function updateEditAffordances() {
+    $('btn-new-song').classList.toggle('hidden', !canEdit());
+    $('group-edit').classList.toggle('hidden', !canEdit() || !currentSong);
+  }
 
   function showToast(msg, isError) {
     toastEl.textContent = msg;
@@ -47,7 +58,9 @@
     viewList.classList.add('hidden');
     viewSong.classList.add('hidden');
     viewSettings.classList.add('hidden');
+    viewEdit.classList.add('hidden');
     if (name === 'list') viewList.classList.remove('hidden');
+    if (name === 'edit') viewEdit.classList.remove('hidden');
     if (name === 'song') viewSong.classList.remove('hidden');
     if (name === 'settings') viewSettings.classList.remove('hidden');
   }
@@ -132,6 +145,13 @@
         badge.textContent = song.key;
         card.appendChild(badge);
       }
+      if (song.pending) {
+        const badge = document.createElement('div');
+        badge.className = 'song-card-badge pending';
+        badge.textContent = 'Not uploaded';
+        badge.title = 'Saved on this device — waiting to upload to Dropbox';
+        card.appendChild(badge);
+      }
       card.addEventListener('click', () => openSong(song));
       songList.appendChild(card);
     }
@@ -145,6 +165,7 @@
     $('song-title-display').textContent = song.title || song.name;
     $('song-meta-display').textContent = song.artist || song.displayPath || '';
     renderCurrentSong();
+    updateEditAffordances();
     showView('song');
     $('song-content').scrollTop = 0;
   }
@@ -253,6 +274,200 @@
     autoScrollRAF = requestAnimationFrame(tickScroll(container, performance.now()));
   });
 
+  // ---------- Editing ----------
+  // editState: { song (null for a new song), original, isNew, appliedTranspose, preview }
+  let editState = null;
+  const editText = $('edit-text');
+  const editPreview = $('edit-preview');
+
+  function editorDirty() {
+    return !!editState && (editState.isNew || editText.value !== editState.original);
+  }
+
+  function openEditor(song, opts) {
+    opts = opts || {};
+    stopAutoScroll();
+    const content = opts.template != null ? opts.template : (song.content || '');
+    editState = { song, original: content, isNew: !!opts.isNew, appliedTranspose: false, preview: false,
+                  newName: opts.newName || null, displayPath: opts.displayPath || null };
+    editText.value = content;
+    editText.classList.remove('hidden');
+    editPreview.classList.add('hidden');
+    $('btn-edit-preview').textContent = 'Preview';
+    $('edit-title-display').textContent = opts.isNew ? `New: ${opts.newName}` : `Edit: ${song.title || song.name}`;
+    $('edit-meta-display').textContent = opts.isNew ? opts.displayPath : (song.displayPath || '');
+    const showApply = !opts.isNew && transposeSteps !== 0;
+    $('group-apply-transpose').classList.toggle('hidden', !showApply);
+    $('btn-edit-apply-transpose').textContent = `Apply transpose (${transposeSteps > 0 ? '+' : ''}${transposeSteps})`;
+    showView('edit');
+    if (opts.isNew) {
+      // Put the cursor after the template so typing can start immediately.
+      editText.focus();
+      editText.setSelectionRange(editText.value.length, editText.value.length);
+    } else {
+      editText.scrollTop = 0;
+    }
+  }
+
+  function closeEditor() {
+    const wasNew = editState && editState.isNew;
+    editState = null;
+    if (wasNew || !currentSong) { renderList(searchInput.value); showView('list'); }
+    else showView('song');
+  }
+
+  $('btn-edit').addEventListener('click', () => {
+    if (!currentSong) return;
+    if (currentSong.content == null) { showToast('This song has no cached text to edit yet — sync first.', true); return; }
+    openEditor(currentSong);
+  });
+
+  $('btn-edit-cancel').addEventListener('click', () => {
+    if (editorDirty() && editText.value !== editState.original && !confirm('Discard your changes?')) return;
+    closeEditor();
+  });
+
+  $('btn-edit-preview').addEventListener('click', () => {
+    editState.preview = !editState.preview;
+    if (editState.preview) {
+      const preferFlat = localStorage.getItem(LS.flats) === '1';
+      try {
+        ChordPro.render(editPreview, ChordPro.parse(editText.value), { transpose: 0, preferFlat });
+      } catch (e) {
+        editPreview.textContent = `Preview failed: ${e.message}`;
+      }
+      editPreview.classList.toggle('two-col', $('song-content').classList.contains('two-col'));
+    }
+    editText.classList.toggle('hidden', editState.preview);
+    editPreview.classList.toggle('hidden', !editState.preview);
+    $('btn-edit-preview').textContent = editState.preview ? 'Edit text' : 'Preview';
+  });
+
+  $('btn-edit-apply-transpose').addEventListener('click', () => {
+    const preferFlat = localStorage.getItem(LS.flats) === '1';
+    editText.value = ChordPro.transposeSource(editText.value, transposeSteps, preferFlat);
+    editState.appliedTranspose = true;
+    $('group-apply-transpose').classList.add('hidden');
+    showToast('Chords rewritten in the new key — tap Save to keep it.');
+  });
+
+  function safeFileName(title) {
+    return title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  }
+
+  $('btn-new-song').addEventListener('click', () => {
+    if (!canEdit()) return;
+    const title = (prompt('Title of the new song:') || '').trim();
+    if (!title) return;
+    const fname = safeFileName(title) || 'Untitled';
+    const folder = (localStorage.getItem(LS.folder) || '/Songbook').replace(/\/+$/, '');
+    let displayPath = `${folder}/${fname}.cho`;
+    for (let n = 2; allSongs.some(s => s.path === displayPath.toLowerCase()); n++) {
+      displayPath = `${folder}/${fname} (${n}).cho`;
+    }
+    const template = `{title: ${title}}\n{artist: }\n{key: }\n\n`;
+    openEditor(null, { isNew: true, template, newName: title, displayPath });
+  });
+
+  $('btn-edit-save').addEventListener('click', async () => {
+    if (!editState) return;
+    const content = editText.value;
+    if (!editState.isNew && content === editState.original) { closeEditor(); return; }
+
+    $('btn-edit-save').disabled = true;
+    try {
+      let base;
+      if (editState.isNew) {
+        const displayPath = editState.displayPath;
+        base = { path: displayPath.toLowerCase(), displayPath, name: displayPath.split('/').pop(), rev: null };
+      } else {
+        base = editState.song;
+      }
+      const meta = ChordPro.extractMeta(content);
+      const record = Object.assign({}, base, {
+        content,
+        size: new TextEncoder().encode(content).length,
+        title: meta.title, subtitle: meta.subtitle, artist: meta.artist, key: meta.key, capo: meta.capo,
+        pending: true,
+      });
+      // Durable first: the edit is safe on the device before any network attempt.
+      await SongDB.putSong(record);
+      await SaveQueue.enqueue({
+        path: record.path, displayPath: record.displayPath, name: record.name,
+        content, baseRev: editState.isNew ? null : base.rev,
+      });
+
+      // Keep the live transpose the person was viewing, unless it was just written
+      // into the file (then the saved text is already in the new key).
+      const keepSteps = editState.appliedTranspose ? 0 : transposeSteps;
+      const idx = allSongs.findIndex(s => s.path === record.path);
+      if (idx >= 0) allSongs[idx] = record; else allSongs.push(record);
+      editState = null;
+      openSong(record);
+      if (keepSteps) {
+        transposeSteps = keepSteps;
+        $('transpose-readout').textContent = String(transposeSteps);
+        renderCurrentSong();
+      }
+      await runFlush({ manual: true });
+    } catch (e) {
+      showToast('Could not save: ' + e.message, true);
+    } finally {
+      $('btn-edit-save').disabled = false;
+    }
+  });
+
+  window.addEventListener('beforeunload', (e) => {
+    if (editorDirty() && editText.value !== editState.original) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  // Upload anything waiting in the outbox. Shows a toast describing the outcome
+  // when `manual` (a Save just happened) or when something needs attention.
+  async function runFlush(opts) {
+    opts = opts || {};
+    if (!canEdit()) return null;
+    const pendingBefore = await SaveQueue.pendingCount();
+    if (!pendingBefore) return null;
+
+    const result = await SaveQueue.flush();
+    await loadFromCache();
+    // Keep the open song pointing at the freshest record (rev changed, or renamed).
+    if (currentSong) {
+      let path = currentSong.path;
+      const ren = result.renamed.find(r => r.from === path);
+      if (ren) path = ren.to;
+      const conflict = result.conflicts.find(c => c.originalPath === path);
+      if (conflict) path = conflict.copyPath; // show the person their own version
+      const fresh = allSongs.find(s => s.path === path);
+      if (fresh) {
+        currentSong = fresh;
+        if (!viewSong.classList.contains('hidden')) {
+          $('song-title-display').textContent = fresh.title || fresh.name;
+          $('song-meta-display').textContent = fresh.artist || fresh.displayPath || '';
+          renderCurrentSong();
+        }
+      }
+    }
+    updatePendingStatus();
+
+    if (result.conflicts.length) {
+      const c = result.conflicts[0];
+      showToast(`"${c.name}" was changed elsewhere — your version was saved as "${c.copyName}".`, true);
+      if (!opts.fromSync) syncWithDropbox(false); // pull down the other version
+    } else if (result.error && result.error.kind === 'network') {
+      if (opts.manual) showToast('Saved on this device — will upload to Dropbox when back online.');
+    } else if (result.error) {
+      showToast(result.error.message, true);
+    } else if (opts.manual && result.saved.length) {
+      showToast('Saved to Dropbox.');
+    } else if (result.saved.length) {
+      showToast(`Uploaded ${result.saved.length} saved edit(s) to Dropbox.`);
+    }
+    return result;
+  }
+
+  window.addEventListener('online', () => runFlush());
+
   // ---------- Search ----------
   searchInput.addEventListener('input', () => {
     btnClearSearch.classList.toggle('hidden', !searchInput.value);
@@ -273,6 +488,7 @@
     $('toggle-flats').checked = localStorage.getItem(LS.flats) === '1';
     updateDropboxStatus();
     updateSyncStatus();
+    updatePendingStatus();
     updateStorageInfo();
     showView('settings');
   }
@@ -283,18 +499,22 @@
     const proxyOn = ProxyClient.isConfigured();
     const connected = DropboxClient.isConnected();
 
-    // Dropbox login card: irrelevant once a public proxy is set, since the proxy
-    // holds its own credentials server-side and visitors never need to log in.
-    $('card-dropbox').classList.toggle('hidden', proxyOn);
-    $('card-appkey').classList.toggle('hidden', proxyOn);
+    // With a public proxy, reading never needs a login — but signing in to Dropbox
+    // is still how the owner gets editing on a device (saves go direct to Dropbox,
+    // never through the read-only proxy). So the card stays, worded as optional.
+    $('card-appkey').classList.toggle('hidden', proxyOn && connected);
 
     if (proxyOn) {
-      $('dropbox-status').textContent = 'Not needed — this instance reads through a public proxy.';
+      $('dropbox-status').textContent = connected
+        ? 'Signed in for editing. Songs are read through the public proxy; saves go directly to your Dropbox.'
+        : 'Not needed for reading — this instance reads through a public proxy. Sign in only to edit and save songs on this device.';
     } else {
-      $('dropbox-status').textContent = connected ? 'Connected.' : 'Not connected.';
+      $('dropbox-status').textContent = connected ? 'Connected — you can edit and save songs.' : 'Not connected.';
     }
-    $('btn-dropbox-connect').classList.toggle('hidden', proxyOn || connected);
-    $('btn-dropbox-disconnect').classList.toggle('hidden', proxyOn || !connected);
+    $('btn-dropbox-connect').textContent = proxyOn ? 'Sign in to edit' : 'Connect Dropbox';
+    $('btn-dropbox-connect').classList.toggle('hidden', connected);
+    $('btn-dropbox-disconnect').classList.toggle('hidden', !connected);
+    updateEditAffordances();
     $('btn-clear-proxy-url').classList.toggle('hidden', !proxyOn);
 
     const note = $('proxy-source-note');
@@ -331,7 +551,9 @@
       showToast(e.message, true);
     }
   });
-  $('btn-dropbox-disconnect').addEventListener('click', () => {
+  $('btn-dropbox-disconnect').addEventListener('click', async () => {
+    const pending = await SaveQueue.pendingCount();
+    if (pending && !confirm(`${pending} edit(s) haven't been uploaded yet. They stay on this device and will upload after you reconnect. Disconnect anyway?`)) return;
     DropboxClient.disconnect();
     updateDropboxStatus();
     showToast('Disconnected from Dropbox.');
@@ -357,6 +579,13 @@
       : 'Never synced.';
   }
 
+  async function updatePendingStatus() {
+    const n = await SaveQueue.pendingCount();
+    const el = $('pending-status');
+    el.textContent = n ? `${n} edit(s) saved on this device, waiting to upload to Dropbox.` : '';
+    el.classList.toggle('hidden', !n);
+  }
+
   async function updateStorageInfo() {
     const est = await SongDB.estimateUsage();
     if (est && est.usage != null) {
@@ -368,7 +597,11 @@
   }
 
   $('btn-clear-cache').addEventListener('click', async () => {
+    const pending = await SaveQueue.pendingCount();
+    if (pending && !confirm(`${pending} edit(s) haven't been uploaded to Dropbox yet and will be lost. Clear anyway?`)) return;
     await SongDB.clearAll();
+    await SongDB.clearOutbox();
+    updatePendingStatus();
     allSongs = [];
     localStorage.removeItem(LS.lastSync);
     renderList('');
@@ -396,6 +629,12 @@
     syncStrip.classList.remove('hidden');
     syncStripText.textContent = 'Syncing…';
     try {
+      // Upload pending edits first, so the listing below already reflects them.
+      if (canEdit()) {
+        syncStripText.textContent = 'Uploading saved edits…';
+        await runFlush({ fromSync: true });
+        syncStripText.textContent = 'Syncing…';
+      }
       const remoteFiles = await client.listChordProFiles(folder);
       const cached = await SongDB.getAllSongs();
       const cachedByPath = new Map(cached.map(c => [c.path, c]));
@@ -405,6 +644,8 @@
       const failed = [];
       for (const f of remoteFiles) {
         const existing = cachedByPath.get(f.path);
+        // Never overwrite an edit that hasn't been uploaded yet.
+        if (existing && existing.pending) continue;
         // Only skip re-download if we actually have usable cached content —
         // a same-revision record with empty/missing content is treated as stale
         // so a broken sync self-heals on the next attempt instead of sticking forever.
@@ -445,7 +686,7 @@
 
       // Remove cached songs no longer present remotely.
       for (const c of cached) {
-        if (!remotePaths.has(c.path)) await SongDB.deleteSong(c.path);
+        if (!remotePaths.has(c.path) && !c.pending) await SongDB.deleteSong(c.path);
       }
 
       localStorage.setItem(LS.lastSync, new Date().toISOString());
@@ -485,6 +726,7 @@
 
     await loadFromCache();
     updateDropboxStatus();
+    updateEditAffordances();
 
     if (sourceReady()) {
       syncWithDropbox(false);

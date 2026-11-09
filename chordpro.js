@@ -147,6 +147,31 @@ const ChordPro = (() => {
     return applyOne(chord);
   }
 
+  // Rewrite the ChordPro source with every chord shifted by `steps` semitones, so a
+  // live transposition can be saved back to the file. Touches only [chord] tokens
+  // and the {key: ...} directive; tab blocks and [*annotations] are left alone.
+  function transposeSource(text, steps, preferFlat) {
+    if (!steps) return text;
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    let inTab = false;
+    return text.replace(/\r\n/g, '\n').split('\n').map((line) => {
+      const d = line.match(DIRECTIVE_RE);
+      if (d) {
+        const dir = d[1].toLowerCase();
+        if (dir === 'sot' || dir === 'start_of_tab') inTab = true;
+        else if (dir === 'eot' || dir === 'end_of_tab') inTab = false;
+        else if (dir === 'key' && d[2]) {
+          return line.replace(/(:\s*)([^}]*?)(\s*\})/, (m, a, k, b) => a + transposeChordToken(k, steps, preferFlat) + b);
+        }
+        return line;
+      }
+      if (inTab) return line;
+      return line.replace(/\[([^\]]*)\]/g, (m, chord) =>
+        (!chord.trim() || chord.startsWith('*')) ? m : '[' + transposeChordToken(chord, steps, preferFlat) + ']'
+      );
+    }).join(eol);
+  }
+
   function render(container, blocks, opts) {
     opts = opts || {};
     const steps = opts.transpose || 0;
@@ -278,5 +303,5 @@ const ChordPro = (() => {
     }
   }
 
-  return { parse, render, extractMeta, transposeChordToken };
+  return { parse, render, extractMeta, transposeChordToken, transposeSource };
 })();
