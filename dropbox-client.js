@@ -212,11 +212,67 @@ const DropboxClient = (() => {
     return res.text();
   }
 
+  // Errors from uploadFile carry a `kind` so the save queue can decide what to do:
+  //   'conflict'   — the file changed on Dropbox since we last synced it (rev mismatch)
+  //   'network'    — offline / flaky connection / Dropbox 5xx or rate limit: retry later
+  //   'permission' — signed-in token lacks files.content.write: user must reconnect
+  //   'other'      — anything else (bad path etc.)
+  function uploadError(kind, message, detail) {
+    const e = new Error(message);
+    e.kind = kind;
+    e.detail = detail;
+    return e;
+  }
+
+  // Upload text to `path`. With `rev`, uses update mode so Dropbox rejects the write
+  // (409 path/conflict) if someone else changed the file since that revision —
+  // we never silently overwrite a newer copy. Without `rev`, creates a new file;
+  // `autorename` picks "name (1).cho" instead of failing if the name is taken.
+  async function uploadFile(path, text, rev, opts) {
+    opts = opts || {};
+    const mode = rev ? { '.tag': 'update', update: rev } : { '.tag': 'add' };
+    let res;
+    try {
+      const token = await getValidAccessToken();
+      res = await fetch(`${CONTENT_ROOT}/files/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/octet-stream',
+          'Dropbox-API-Arg': asciiSafeHeaderJson({
+            path, mode, autorename: !!opts.autorename, mute: true, strict_conflict: true,
+          }),
+        },
+        body: new TextEncoder().encode(text),
+      });
+    } catch (e) {
+      // fetch() only throws on network failure (offline, DNS, CORS abort).
+      if (e instanceof TypeError) throw uploadError('network', 'No connection to Dropbox.');
+      throw e;
+    }
+
+    if (res.ok) return res.json(); // { name, path_lower, path_display, rev, size, server_modified, ... }
+
+    const errText = await res.text();
+    if (res.status === 409 && errText.includes('conflict')) {
+      throw uploadError('conflict', 'File was changed on Dropbox since it was last synced.', errText);
+    }
+    if (errText.includes('missing_scope') || res.status === 401 || res.status === 403) {
+      throw uploadError('permission',
+        'Dropbox sign-in does not allow saving. Enable files.content.write for the app, then Disconnect and Connect Dropbox again in Settings.',
+        errText);
+    }
+    if (res.status === 429 || res.status >= 500) {
+      throw uploadError('network', `Dropbox is busy (${res.status}) — will retry.`, errText);
+    }
+    throw uploadError('other', `Dropbox upload error: ${errText.slice(0, 200)}`, errText);
+  }
+
   return {
     getAppKey, setAppKey,
     beginAuth, handleRedirectIfPresent,
     isConnected, disconnect,
-    listChordProFiles, downloadFile,
+    listChordProFiles, downloadFile, uploadFile,
     redirectUri,
   };
 })();

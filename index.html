@@ -26,9 +26,14 @@
         <span class="brand-mark">[C]</span>
         <span class="brand-name">ChordBook</span>
       </div>
+      <div class="topbar-actions">
+      <button id="btn-new-song" class="icon-btn hidden" title="New song" aria-label="New song">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19,13H13v6H11V13H5V11h6V5h2v6h6Z"/></svg>
+      </button>
       <button id="btn-settings" class="icon-btn" title="Settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19.14,12.94a7.14,7.14,0,0,0,.06-.94,7.14,7.14,0,0,0-.06-.94l2.03-1.58a.5.5,0,0,0,.12-.64l-1.92-3.32a.5.5,0,0,0-.6-.22l-2.39.96a7.34,7.34,0,0,0-1.62-.94L14.4,2.71a.5.5,0,0,0-.5-.42H10.1a.5.5,0,0,0-.5.42L9.24,5.26a7.34,7.34,0,0,0-1.62.94l-2.39-.96a.5.5,0,0,0-.6.22L2.71,8.78a.5.5,0,0,0,.12.64L4.86,11a7.14,7.14,0,0,0-.06.94,7.14,7.14,0,0,0,.06.94L2.83,14.46a.5.5,0,0,0-.12.64l1.92,3.32a.5.5,0,0,0,.6.22l2.39-.96a7.34,7.34,0,0,0,1.62.94l.36,2.55a.5.5,0,0,0,.5.42h3.8a.5.5,0,0,0,.5-.42l.36-2.55a7.34,7.34,0,0,0,1.62-.94l2.39.96a.5.5,0,0,0,.6-.22l1.92-3.32a.5.5,0,0,0-.12-.64ZM12,15.5A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"/></svg>
       </button>
+      </div>
     </header>
 
     <div class="searchbar">
@@ -85,9 +90,36 @@
       <div class="tool-group" title="Columns">
         <button id="btn-columns" class="tool-btn wide">2-col</button>
       </div>
+      <div class="tool-group hidden" id="group-edit" title="Edit this song">
+        <button id="btn-edit" class="tool-btn wide">✎ Edit</button>
+      </div>
     </div>
 
     <div id="song-content" class="song-content"></div>
+  </section>
+
+  <!-- ===== EDITOR ===== -->
+  <section id="view-edit" class="view hidden">
+    <header class="topbar songbar">
+      <button id="btn-edit-cancel" class="tool-btn wide" aria-label="Cancel editing">Cancel</button>
+      <div class="song-heading">
+        <div id="edit-title-display" class="song-title-display">Edit song</div>
+        <div id="edit-meta-display" class="song-meta-display"></div>
+      </div>
+      <button id="btn-edit-save" class="btn-primary btn-compact">Save</button>
+    </header>
+
+    <div class="toolbar">
+      <div class="tool-group">
+        <button id="btn-edit-preview" class="tool-btn wide">Preview</button>
+      </div>
+      <div class="tool-group hidden" id="group-apply-transpose" title="Write the current transposition into the file">
+        <button id="btn-edit-apply-transpose" class="tool-btn wide">Apply transpose</button>
+      </div>
+    </div>
+
+    <textarea id="edit-text" class="edit-text" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+    <div id="edit-preview" class="song-content hidden"></div>
   </section>
 
   <!-- ===== SETTINGS VIEW ===== -->
@@ -135,6 +167,7 @@
       <div class="settings-card">
         <h3>Sync</h3>
         <p id="sync-status" class="muted small">Never synced.</p>
+        <p id="pending-status" class="muted small hidden"></p>
         <button id="btn-sync-now" class="btn-primary">Sync now</button>
       </div>
 
@@ -165,6 +198,7 @@
 <script src="dropbox-client.js"></script>
 <script src="proxy-client.js"></script>
 <script src="db.js"></script>
+<script src="save-queue.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

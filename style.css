@@ -471,3 +471,34 @@ body.stage-mode .cp-chord { color: #FFD166; }
 @media (min-width: 700px) {
   #app { max-width: 640px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 }
+
+/* ---------- Editing ---------- */
+.topbar-actions { display: flex; align-items: center; gap: 4px; }
+
+.btn-compact { margin-top: 0; padding: 8px 16px; font-size: 14px; }
+.btn-primary:disabled { opacity: 0.5; cursor: default; }
+
+.edit-text {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: calc(15px * var(--song-scale));
+  line-height: 1.55;
+  padding: 16px 18px max(24px, env(safe-area-inset-bottom)) 18px;
+  tab-size: 4;
+  white-space: pre;
+  overflow: auto;
+}
+
+.song-card-badge.pending {
+  color: var(--danger);
+  border-color: rgba(217,105,95,0.4);
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+.song-card-badge + .song-card-badge { margin-left: 6px; }
